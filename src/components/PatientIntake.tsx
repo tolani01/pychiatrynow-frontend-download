@@ -120,6 +120,7 @@ export default function PatientIntake() {
     
     try {
       const apiBase = import.meta.env.VITE_API_BASE_URL || (window.location.hostname === 'localhost' ? 'http://127.0.0.1:8000' : 'https://psychnow-api.onrender.com');
+      console.log('API Base URL:', apiBase, 'Hostname:', window.location.hostname);
       const headers: HeadersInit = {
         'Content-Type': 'application/json',
       };
@@ -208,6 +209,7 @@ export default function PatientIntake() {
     
     try {
       const apiBase = import.meta.env.VITE_API_BASE_URL || (window.location.hostname === 'localhost' ? 'http://127.0.0.1:8000' : 'https://psychnow-api.onrender.com');
+      console.log('API Base URL:', apiBase, 'Hostname:', window.location.hostname);
       const headers: HeadersInit = {
         'Content-Type': 'application/json',
       };
@@ -240,8 +242,9 @@ export default function PatientIntake() {
       
     } catch (err) {
       console.error('Failed to start session:', err);
+      console.error('Error details:', err);
       setIsInitializing(false);
-      pushSys('⚠️ Failed to start session. Please refresh the page.', new Date().toISOString());
+      pushSys(`⚠️ Failed to start session: ${err.message || 'Unknown error'}. Please refresh the page.`, new Date().toISOString());
     }
   };
 
@@ -287,6 +290,7 @@ export default function PatientIntake() {
     
     try {
       const apiBase = import.meta.env.VITE_API_BASE_URL || (window.location.hostname === 'localhost' ? 'http://127.0.0.1:8000' : 'https://psychnow-api.onrender.com');
+      console.log('API Base URL:', apiBase, 'Hostname:', window.location.hostname);
       const headers: HeadersInit = {
         'Content-Type': 'application/json',
       };
@@ -456,6 +460,7 @@ export default function PatientIntake() {
     
     try {
       const apiBase = import.meta.env.VITE_API_BASE_URL || (window.location.hostname === 'localhost' ? 'http://127.0.0.1:8000' : 'https://psychnow-api.onrender.com');
+      console.log('API Base URL:', apiBase, 'Hostname:', window.location.hostname);
       const headers: HeadersInit = {
         'Content-Type': 'application/json',
       };
@@ -511,6 +516,7 @@ export default function PatientIntake() {
     
     try {
       const apiBase = import.meta.env.VITE_API_BASE_URL || (window.location.hostname === 'localhost' ? 'http://127.0.0.1:8000' : 'https://psychnow-api.onrender.com');
+      console.log('API Base URL:', apiBase, 'Hostname:', window.location.hostname);
       
       // Build headers - only add Authorization if token exists
       const headers: HeadersInit = {
@@ -724,6 +730,7 @@ export default function PatientIntake() {
   const handleSignup = async (signupData: {name: string; email: string; phone: string; state: string; password: string}) => {
     try {
       const apiBase = import.meta.env.VITE_API_BASE_URL || (window.location.hostname === 'localhost' ? 'http://127.0.0.1:8000' : 'https://psychnow-api.onrender.com');
+      console.log('API Base URL:', apiBase, 'Hostname:', window.location.hostname);
       
       // Step 1: Create account
       const signupRes = await fetch(`${apiBase}/api/v1/auth/register`, {

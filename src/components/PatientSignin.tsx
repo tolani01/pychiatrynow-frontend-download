@@ -6,11 +6,13 @@ import { CustomInput } from './foundation/Input';
 
 export default function PatientSignin() {
   const navigate = useNavigate();
+  const apiBase = import.meta.env.VITE_API_BASE_URL || 'http://127.0.0.1:8000';
   const [formData, setFormData] = useState({
     email: '',
     password: ''
   });
   const [errors, setErrors] = useState<Record<string, string>>({});
+  const [loading, setLoading] = useState(false);
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { name, value } = e.target;
@@ -32,19 +34,117 @@ export default function PatientSignin() {
     return Object.keys(newErrors).length === 0;
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
-    // Check for demo credentials
-    if (formData.email === 'demo' && formData.password === 'demo') {
+    // Check for demo credentials - use real backend
+    if (formData.email === 'demo@demo.com' && formData.password === 'demo') {
+      try {
+        // First, create demo user if it doesn't exist
+        await fetch(`${apiBase}/api/v1/auth/create-demo-user`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+        });
+        
+        // Then login with demo credentials
+        const res = await fetch(`${apiBase}/api/v1/auth/login`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ 
+            email: 'demo@demo.com', 
+            password: 'demo' 
+          }),
+        });
+
+        if (res.ok) {
+          const data = await res.json();
+          localStorage.setItem('access_token', data.access_token);
+          
+          // Get user info from /me endpoint
+          const userRes = await fetch(`${apiBase}/api/v1/auth/me`, {
+            headers: { 'Authorization': `Bearer ${data.access_token}` }
+          });
+          
+          if (userRes.ok) {
+            const userData = await userRes.json();
+            localStorage.setItem('user_id', userData.id);
+            localStorage.setItem('user_role', userData.role);
+            localStorage.setItem('user_email', userData.email);
+            
+            // Store user name (combine first_name and last_name if available)
+            if (userData.first_name || userData.last_name) {
+              const fullName = [userData.first_name, userData.last_name].filter(Boolean).join(' ');
+              localStorage.setItem('user_name', fullName);
+            } else if (userData.name) {
+              localStorage.setItem('user_name', userData.name);
+            }
+          }
+          
+          navigate('/patient-dashboard');
+          return;
+        }
+      } catch (err) {
+        console.log('Backend not available, using fallback demo mode');
+      }
+      
+      // Fallback demo mode if backend not available
+      localStorage.setItem('access_token', 'demo_token_123');
+      localStorage.setItem('user_id', 'demo_user_123');
+      localStorage.setItem('user_role', 'patient');
+      localStorage.setItem('user_email', 'demo@demo.com');
+      localStorage.setItem('user_name', 'Demo User');
       navigate('/patient-dashboard');
       return;
     }
     
-    if (validateForm()) {
-      // Handle signin logic here
-      console.log('Signin data:', formData);
+    if (!validateForm()) return;
+
+    setLoading(true);
+    setErrors({});
+
+    try {
+      const res = await fetch(`${apiBase}/api/v1/auth/login`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ 
+          email: formData.email, 
+          password: formData.password 
+        }),
+      });
+
+      if (!res.ok) {
+        const data = await res.json();
+        throw new Error(data.detail || 'Login failed');
+      }
+
+      const data = await res.json();
+      localStorage.setItem('access_token', data.access_token);
+      
+      // Get user info from /me endpoint
+      const userRes = await fetch(`${apiBase}/api/v1/auth/me`, {
+        headers: { 'Authorization': `Bearer ${data.access_token}` }
+      });
+      
+      if (userRes.ok) {
+        const userData = await userRes.json();
+        localStorage.setItem('user_id', userData.id);
+        localStorage.setItem('user_role', userData.role);
+        localStorage.setItem('user_email', userData.email);
+        
+        // Store user name (combine first_name and last_name if available)
+        if (userData.first_name || userData.last_name) {
+          const fullName = [userData.first_name, userData.last_name].filter(Boolean).join(' ');
+          localStorage.setItem('user_name', fullName);
+        } else if (userData.name) {
+          localStorage.setItem('user_name', userData.name);
+        }
+      }
+      
       navigate('/patient-dashboard');
+    } catch (err: any) {
+      setErrors({ general: err.message || 'Login failed. Please try again.' });
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -105,9 +205,10 @@ export default function PatientSignin() {
             <CustomButton
               type="submit"
               variant="primary"
-              className="w-full bg-blue-600 hover:bg-blue-700 text-white py-3 rounded-lg font-medium"
+              disabled={loading}
+              className="w-full bg-blue-600 hover:bg-blue-700 text-white py-3 rounded-lg font-medium disabled:opacity-50"
             >
-              Sign in
+              {loading ? 'Signing in...' : 'Sign in'}
             </CustomButton>
           </form>
 
@@ -128,7 +229,7 @@ export default function PatientSignin() {
           {/* Demo Credentials */}
           <div className="mt-6 pt-6 border-t border-gray-300">
             <div className="text-center text-sm text-gray-600 mb-4">
-              <p><strong>Demo Login:</strong> demo / demo</p>
+              <p><strong>Demo Login:</strong> demo@demo.com / demo</p>
             </div>
           </div>
 

@@ -21,6 +21,9 @@ import StaffSignup from './components/StaffSignup';
 import StaffSignin from './components/StaffSignin';
 import StaffPending from './components/StaffPending';
 import StaffDashboard from './components/StaffDashboard';
+import PatientPortalDashboard from './components/patient-portal/PatientDashboard';
+import AppointmentScheduler from './components/patient-portal/AppointmentScheduler';
+import HealthRecords from './components/patient-portal/HealthRecords';
 
 export default function App() {
   return (
@@ -34,6 +37,9 @@ export default function App() {
           <Route path="/patient-signup" element={<PatientSignup />} />
           <Route path="/patient-signin" element={<PatientSignin />} />
           <Route path="/patient-dashboard" element={<PatientDashboard />} />
+          <Route path="/patient-portal/dashboard" element={<PatientPortalDashboard />} />
+          <Route path="/patient-portal/appointments/new" element={<AppointmentScheduler />} />
+          <Route path="/patient-portal/health-records" element={<HealthRecords />} />
           <Route path="/patient-checkin" element={<PatientCheckin />} />
           <Route path="/provider-dashboard" element={<ProviderDashboard />} />
           <Route path="/provider-signup" element={<ProviderSignup />} />

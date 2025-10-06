@@ -1,11 +1,163 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { CustomButton } from './foundation/Button';
 import { CustomCard } from './foundation/Card';
 
+interface PausedSession {
+  id: string;
+  session_token: string;
+  status: string;
+  current_phase: string;
+  resume_token: string | null;
+  paused_at: string | null;
+  expires_at: string | null;
+  completed_screeners: string[];
+}
+
+interface CompletedReport {
+  id: string;
+  patient_id: string;
+  severity_level: string | null;
+  risk_level: string | null;
+  urgency: string | null;
+  created_at: string;
+  chief_complaint: string | null;
+}
+
 export default function PatientDashboard() {
   const navigate = useNavigate();
-  const [patientName] = useState('Sarah Johnson'); // Mock patient name
+  const [patientName, setPatientName] = useState('Guest');
+  const [pausedSession, setPausedSession] = useState<PausedSession | null>(null);
+  const [loadingSessions, setLoadingSessions] = useState(true);
+  const [completedReports, setCompletedReports] = useState<CompletedReport[]>([]);
+  const [loadingReports, setLoadingReports] = useState(true);
+
+  // Load user name from localStorage
+  useEffect(() => {
+    const storedName = localStorage.getItem('user_name');
+    const storedEmail = localStorage.getItem('user_email');
+    
+    if (storedName) {
+      setPatientName(storedName);
+    } else if (storedEmail) {
+      // If no name is stored, use email as fallback
+      setPatientName(storedEmail.split('@')[0]);
+    }
+  }, []);
+
+  // Fetch paused sessions and completed reports
+  useEffect(() => {
+    fetchPausedSessions();
+    fetchCompletedReports();
+  }, []);
+
+  const fetchCompletedReports = async () => {
+    const token = localStorage.getItem('access_token');
+    const apiBase = import.meta.env.VITE_API_BASE_URL || 'http://127.0.0.1:8000';
+    
+    // For authenticated users - fetch all their reports
+    if (token) {
+      try {
+        const res = await fetch(`${apiBase}/api/v1/reports/me?limit=3`, {
+          headers: {
+            'Authorization': `Bearer ${token}`
+          }
+        });
+        
+        if (res.ok) {
+          const reports = await res.json();
+          setCompletedReports(reports);
+        }
+      } catch (error) {
+        console.error('Error fetching authenticated reports:', error);
+      }
+    } else {
+      // For anonymous users - check localStorage for last report
+      const lastReportId = localStorage.getItem('last_report_id');
+      
+      if (lastReportId) {
+        try {
+          // Fetch the specific report by ID (no auth required for own report via session)
+          const res = await fetch(`${apiBase}/api/v1/reports/${lastReportId}`);
+          
+          if (res.ok) {
+            const report = await res.json();
+            setCompletedReports([report]);
+          } else {
+            // Report not found or expired, clear from localStorage
+            localStorage.removeItem('last_report_id');
+            localStorage.removeItem('last_report_date');
+          }
+        } catch (error) {
+          console.error('Error fetching anonymous report:', error);
+          localStorage.removeItem('last_report_id');
+        }
+      }
+    }
+    
+    setLoadingReports(false);
+  };
+
+  const fetchPausedSessions = async () => {
+    const token = localStorage.getItem('access_token');
+    
+    // Also check localStorage for anonymous paused session
+    const localPaused = localStorage.getItem('paused_session');
+    if (localPaused) {
+      try {
+        const parsed = JSON.parse(localPaused);
+        const expiresAt = new Date(parsed.expires_at);
+        if (expiresAt > new Date()) {
+          setPausedSession({
+            id: parsed.session_token,
+            session_token: parsed.session_token,
+            status: 'paused',
+            current_phase: 'unknown',
+            resume_token: parsed.resume_token,
+            paused_at: parsed.paused_at,
+            expires_at: parsed.expires_at,
+            completed_screeners: parsed.completed_screeners || []
+          });
+          setLoadingSessions(false);
+          return;
+        } else {
+          // Expired, clear it
+          localStorage.removeItem('paused_session');
+        }
+      } catch (e) {
+        console.error('Error parsing local paused session:', e);
+      }
+    }
+    
+    // If authenticated, fetch from backend
+    if (token) {
+      try {
+        const apiBase = import.meta.env.VITE_API_BASE_URL || 'http://127.0.0.1:8000';
+        const res = await fetch(`${apiBase}/api/v1/intake/sessions/me`, {
+          headers: {
+            'Authorization': `Bearer ${token}`
+          }
+        });
+        
+        if (res.ok) {
+          const data = await res.json();
+          const paused = data.sessions.find((s: PausedSession) => s.status === 'paused');
+          if (paused) {
+            setPausedSession(paused);
+          }
+        }
+      } catch (error) {
+        console.error('Error fetching sessions:', error);
+      }
+    }
+    
+    setLoadingSessions(false);
+  };
+
+  const handleResumeAssessment = () => {
+    // Navigate to intake page with state indicating intentional resume
+    navigate('/patient-intake', { state: { autoResume: true } });
+  };
 
   // Mock data
   const nextAppointment = {
@@ -51,6 +203,17 @@ export default function PatientDashboard() {
 
             {/* Profile Menu */}
             <div className="flex items-center space-x-4">
+              <CustomButton
+                variant="secondary"
+                onClick={() => {
+                  localStorage.removeItem('access_token');
+                  localStorage.removeItem('user_role');
+                  navigate('/patient-signin');
+                }}
+                className="text-sm px-3 py-1.5"
+              >
+                Sign Out
+              </CustomButton>
               <div className="w-8 h-8 bg-blue-100 rounded-full flex items-center justify-center">
                 <span className="text-blue-600 font-medium text-sm">
                   {patientName.split(' ').map(n => n[0]).join('')}
@@ -72,6 +235,151 @@ export default function PatientDashboard() {
         <div className="grid lg:grid-cols-3 gap-8">
           {/* Main Column */}
           <div className="lg:col-span-2 space-y-6">
+            {/* Paused Assessment Card */}
+            {pausedSession && !loadingSessions && (
+              <CustomCard className="bg-gradient-to-r from-blue-50 to-indigo-50 border-2 border-blue-300 rounded-xl p-6">
+                <div className="flex items-start justify-between">
+                  <div className="flex-1">
+                    <div className="flex items-center space-x-2 mb-2">
+                      <div className="w-3 h-3 bg-blue-500 rounded-full animate-pulse"></div>
+                      <h2 className="text-xl font-semibold text-gray-900">Assessment In Progress</h2>
+                    </div>
+                    <p className="text-gray-700 mb-3">
+                      You have a paused mental health assessment. Continue where you left off.
+                    </p>
+                    <div className="space-y-1 text-sm text-gray-600">
+                      <p>
+                        <span className="font-medium">Paused:</span>{' '}
+                        {pausedSession.paused_at 
+                          ? new Date(pausedSession.paused_at).toLocaleString()
+                          : 'Recently'
+                        }
+                      </p>
+                      {pausedSession.completed_screeners.length > 0 && (
+                        <p>
+                          <span className="font-medium">Progress:</span>{' '}
+                          {pausedSession.completed_screeners.length} screeners completed
+                        </p>
+                      )}
+                      {pausedSession.expires_at && (
+                        <p>
+                          <span className="font-medium">Expires:</span>{' '}
+                          {new Date(pausedSession.expires_at).toLocaleString()}
+                        </p>
+                      )}
+                    </div>
+                  </div>
+                  <div className="ml-4">
+                    <CustomButton
+                      variant="primary"
+                      onClick={handleResumeAssessment}
+                      className="bg-blue-600 hover:bg-blue-700 text-white px-6 py-3 whitespace-nowrap"
+                    >
+                      Resume Assessment
+                    </CustomButton>
+                  </div>
+                </div>
+              </CustomCard>
+            )}
+            
+            {/* Sign In Prompt for Anonymous Users */}
+            {!localStorage.getItem('access_token') && completedReports.length > 0 && (
+              <div className="bg-gradient-to-r from-amber-50 to-orange-50 border-2 border-amber-300 rounded-xl p-4">
+                <div className="flex items-start justify-between">
+                  <div className="flex-1">
+                    <h3 className="font-semibold text-amber-900 mb-1">💾 Save Your Assessments Permanently</h3>
+                    <p className="text-sm text-amber-800 mb-3">
+                      You're viewing your most recent assessment. Sign in to save all your reports and track your progress over time.
+                    </p>
+                  </div>
+                  <CustomButton
+                    variant="primary"
+                    onClick={() => navigate('/patient-signin')}
+                    className="bg-amber-600 hover:bg-amber-700 text-white px-4 py-2 whitespace-nowrap"
+                  >
+                    Sign In
+                  </CustomButton>
+                </div>
+              </div>
+            )}
+            
+            {/* Completed Assessments */}
+            {!loadingReports && completedReports.length > 0 && (
+              <CustomCard className="bg-white shadow-sm border border-gray-200 rounded-xl p-6">
+                <h2 className="text-xl font-semibold text-gray-900 mb-4">
+                  {localStorage.getItem('access_token') ? 'Recent Assessments' : 'Your Latest Assessment'}
+                </h2>
+                <div className="space-y-4">
+                  {completedReports.map((report, idx) => {
+                    const getRiskColor = (risk: string | null) => {
+                      if (!risk) return 'gray';
+                      if (risk.toLowerCase() === 'high') return 'red';
+                      if (risk.toLowerCase() === 'moderate') return 'orange';
+                      return 'green';
+                    };
+                    
+                    const riskColor = getRiskColor(report.risk_level);
+                    
+                    return (
+                      <div key={report.id} className="border border-gray-200 rounded-lg p-4 hover:border-blue-300 transition-colors">
+                        <div className="flex items-start justify-between">
+                          <div className="flex-1">
+                            <div className="flex items-center space-x-2 mb-2">
+                              <span className="text-gray-700 font-medium">
+                                📋 {new Date(report.created_at).toLocaleDateString('en-US', { 
+                                  month: 'short', 
+                                  day: 'numeric', 
+                                  year: 'numeric',
+                                  hour: 'numeric',
+                                  minute: '2-digit'
+                                })}
+                              </span>
+                              <span className={`px-2 py-1 rounded-full text-xs font-medium bg-${riskColor}-100 text-${riskColor}-800`}>
+                                {report.risk_level || 'N/A'} Risk
+                              </span>
+                            </div>
+                            {report.chief_complaint && (
+                              <p className="text-sm text-gray-600 mb-2">
+                                {report.chief_complaint}
+                              </p>
+                            )}
+                            <div className="flex items-center space-x-4 text-xs text-gray-500">
+                              <span>Severity: {report.severity_level || 'N/A'}</span>
+                              <span>•</span>
+                              <span>Urgency: {report.urgency || 'N/A'}</span>
+                            </div>
+                          </div>
+                          <div className="flex flex-col space-y-2 ml-4">
+                            <CustomButton
+                              variant="primary"
+                              onClick={() => navigate(`/patient-intake-summary?report_id=${report.id}`)}
+                              className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 text-sm whitespace-nowrap"
+                            >
+                              View Report
+                            </CustomButton>
+                            <CustomButton
+                              variant="secondary"
+                              onClick={() => window.open(`${import.meta.env.VITE_API_BASE_URL || 'http://127.0.0.1:8000'}/api/v1/reports/${report.id}/pdf`, '_blank')}
+                              className="border-gray-300 text-gray-700 hover:bg-gray-50 px-4 py-2 text-sm whitespace-nowrap"
+                            >
+                              Download PDF
+                            </CustomButton>
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+                {completedReports.length === 3 && (
+                  <div className="mt-4 text-center">
+                    <button className="text-blue-600 hover:text-blue-700 text-sm font-medium">
+                      View All Assessments →
+                    </button>
+                  </div>
+                )}
+              </CustomCard>
+            )}
+            
             {/* Next Appointment Card */}
             <CustomCard className="bg-white shadow-sm border border-gray-200 rounded-xl p-6">
               <div className="flex items-start justify-between">
@@ -141,24 +449,38 @@ export default function PatientDashboard() {
               <div className="space-y-3">
                 <CustomButton
                   variant="primary"
-                  onClick={() => navigate('/patient-intake')}
+                  onClick={() => navigate('/patient-intake', { state: { userName: patientName } })}
                   className="w-full bg-blue-600 hover:bg-blue-700 text-white py-3 rounded-lg"
                 >
-                  Request Care
+                  🤖 Start Assessment with Ava
                 </CustomButton>
                 <CustomButton
                   variant="secondary"
                   onClick={() => navigate('/patient-checkin')}
                   className="w-full border-gray-300 text-gray-700 hover:bg-gray-50 py-3 rounded-lg"
                 >
-                  Start Check-In
+                  ✅ Start Pre-Appointment Check-In
                 </CustomButton>
+                <div className="relative group">
+                  <CustomButton
+                    variant="secondary"
+                    disabled
+                    className="w-full border-gray-300 text-gray-400 bg-gray-50 py-3 rounded-lg cursor-not-allowed"
+                  >
+                    📅 Request Appointment
+                  </CustomButton>
+                  <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
+                    <div className="bg-gray-900 text-white text-xs px-3 py-1 rounded shadow-lg -mt-12">
+                      Coming soon!
+                    </div>
+                  </div>
+                </div>
                 <CustomButton
                   variant="secondary"
                   onClick={() => navigate('/resources')}
                   className="w-full border-gray-300 text-gray-700 hover:bg-gray-50 py-3 rounded-lg"
                 >
-                  Explore Resources
+                  📚 Explore Resources
                 </CustomButton>
               </div>
             </CustomCard>

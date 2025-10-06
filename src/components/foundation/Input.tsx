@@ -3,16 +3,20 @@ import { cn } from "../ui/utils";
 interface InputProps {
   placeholder?: string;
   value?: string;
-  onKeyPress?: (e: React.KeyboardEvent<HTMLInputElement>) => void;  // Add this optional prop
+  name?: string;
+  id?: string;
+  onKeyPress?: (e: React.KeyboardEvent<HTMLInputElement>) => void;
   onChange?: (e: React.ChangeEvent<HTMLInputElement>) => void;
   className?: string;
   type?: string;
-  disabled?: boolean;  // Add this optional prop
+  disabled?: boolean;
 }
 
-export function CustomInput({ placeholder, value, onKeyPress, onChange, className, type = "text" , disabled }: InputProps) {
+export function CustomInput({ placeholder, value, name, id, onKeyPress, onChange, className, type = "text", disabled }: InputProps) {
   return (
     <input
+      id={id}
+      name={name}
       type={type}
       placeholder={placeholder}
       value={value}
